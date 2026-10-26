@@ -1,3 +1,62 @@
+server:
+  port: 8080
+
 spring:
   application:
-    name: URLShortener
+    name: url-shortener
+
+  # MySQL Database Configuration
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/urlshortener?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:shortener}
+    password: ${DB_PASSWORD:shortenerpass}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # JPA & Hibernate Settings
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redispass}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2000ms
+
+  # Spring Cache Abstraction
+  cache:
+    type: redis
+    redis:
+      time-to-live: 86400000ms # 24 hours default TTL
+      cache-null-values: false
+
+# Custom Application Properties
+app:
+  shortener:
+    base-url: http://localhost:8080/
+    default-ttl-seconds: 86400 # 24 hours
+  rate-limit:
+    requests-per-minute: 10
+
+# Actuator Health Check Endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
