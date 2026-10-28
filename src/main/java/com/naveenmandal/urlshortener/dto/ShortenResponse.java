@@ -5,6 +5,11 @@ public class ShortenResponse {
     private String shortUrl;
     private String longUrl;
 
+    public ShortenResponse( String shortUrl, String shortCode, String longUrl) {
+        this.shortCode = shortCode;
+        this.shortUrl = shortUrl;
+        this.longUrl = longUrl;
+    }
     public String getShortCode() {
         return shortCode;
     }
