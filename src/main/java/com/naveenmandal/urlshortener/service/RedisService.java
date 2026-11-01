@@ -63,4 +63,49 @@ public class RedisService {
     public void evictUrl(String shortCode) {
         redisTemplate.delete(URL_CACHE_PREFIX + shortCode);
     }
+
+    // ─── Click Analytics (Write-Behind) ──────────────────────────────────
+    private static final String CLICK_COUNT_PREFIX = "clicks:";
+    private static final String ACTIVE_CLICKS_SET = "clicks:active_keys";
+
+    /**
+     * Atomically increments the click counter in Redis.
+     * Also records the shortCode in an active set so the scheduled sync
+     * knows which URLs have pending clicks to flush.
+     *
+     * Redis commands:
+     *   INCR clicks:aB3x9
+     *   SADD clicks:active_keys "aB3x9"
+     */
+    public void recordClick(String shortCode) {
+        String key = CLICK_COUNT_PREFIX + shortCode;
+        redisTemplate.opsForValue().increment(key);
+        // Track which short codes have unsynced clicks
+        redisTemplate.opsForSet().add(ACTIVE_CLICKS_SET, shortCode);
+    }
+
+    /**
+     * Gets pending clicks currently in Redis memory (not yet flushed to DB).
+     */
+    public long getPendingClicks(String shortCode) {
+        String countStr = redisTemplate.opsForValue().get(CLICK_COUNT_PREFIX + shortCode);
+        return countStr != null ? Long.parseLong(countStr) : 0L;
+    }
+
+    /**
+     * Returns all short codes that have accumulated clicks.
+     */
+    public java.util.Set<String> getActiveClickCodes() {
+        return redisTemplate.opsForSet().members(ACTIVE_CLICKS_SET);
+    }
+
+    /**
+     * Atomically gets the current count and resets the key.
+     * Using GETDEL (Get & Delete) ensures no clicks are lost during the sync!
+     */
+    public long getAndResetClicks(String shortCode) {
+        String countStr = redisTemplate.opsForValue().getAndDelete(CLICK_COUNT_PREFIX + shortCode);
+        redisTemplate.opsForSet().remove(ACTIVE_CLICKS_SET, shortCode);
+        return countStr != null ? Long.parseLong(countStr) : 0L;
+    }
 }

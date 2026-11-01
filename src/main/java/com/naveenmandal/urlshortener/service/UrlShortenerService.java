@@ -99,11 +99,15 @@ public class UrlShortenerService {
     public Optional<String> resolve(String shortCode){
         String cachedLongUrl = redisService.getCachedUrl(shortCode);
         if(cachedLongUrl != null){
+            // Record click in Redis (FAST PATH)
+            redisService.recordClick(shortCode);
             return Optional.of(cachedLongUrl);
         }
         Optional<UrlMapping> dbLongUrl = repository.findByShortCode(shortCode);
         if(dbLongUrl.isPresent()){
             redisService.cacheUrl( shortCode, dbLongUrl.get().getLongUrl());
+            // Record click in Redis
+            redisService.recordClick(shortCode);
             return Optional.of(dbLongUrl.get().getLongUrl());
         }
 
