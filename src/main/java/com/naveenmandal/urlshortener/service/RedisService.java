@@ -3,6 +3,7 @@ package com.naveenmandal.urlshortener.service;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Service  // marks this as a Spring-managed service bean
@@ -95,7 +96,7 @@ public class RedisService {
     /**
      * Returns all short codes that have accumulated clicks.
      */
-    public java.util.Set<String> getActiveClickCodes() {
+    public Set<String> getActiveClickCodes() {
         return redisTemplate.opsForSet().members(ACTIVE_CLICKS_SET);
     }
 

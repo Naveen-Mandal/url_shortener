@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class UrlShortenerService {
@@ -113,5 +114,39 @@ public class UrlShortenerService {
 
         return Optional.empty();
 
+    }
+
+
+    /**
+     * Real-time click count = DB count + pending Redis buffer count.
+     */
+    public Optional<Long> getTotalClicks(String shortCode) {
+        Optional<UrlMapping> mapping = repository.findByShortCode(shortCode);
+        if (mapping.isEmpty()) {
+            return Optional.empty();
+        }
+
+        long dbClicks = mapping.get().getClickCount();
+        long redisPendingClicks = redisService.getPendingClicks(shortCode);
+
+        return Optional.of(dbClicks + redisPendingClicks);
+    }
+
+
+    /**
+     * Flushes accumulated clicks from Redis to MySQL.
+     */
+    public void flushClicksToDatabase() {
+        Set<String> activeCodes = redisService.getActiveClickCodes();
+        if (activeCodes == null || activeCodes.isEmpty()) {
+            return;
+        }
+
+        for (String shortCode : activeCodes) {
+            long pendingClicks = redisService.getAndResetClicks(shortCode);
+            if (pendingClicks > 0) {
+                repository.incrementClickCount(shortCode, pendingClicks);
+            }
+        }
     }
 }
