@@ -5,9 +5,13 @@ import com.naveenmandal.urlshortener.dto.ShortenResponse;
 import com.naveenmandal.urlshortener.model.UrlMapping;
 import com.naveenmandal.urlshortener.repository.UrlMappingRepository;
 import com.naveenmandal.urlshortener.util.Base62Util;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 @Service
 public class UrlShortenerService {
@@ -41,27 +45,54 @@ public class UrlShortenerService {
      * It does NOT protect Redis (Redis has no transactions with DB),
      * but that's acceptable — Redis is a cache, DB is source of truth.
      */
-    @Transactional
+    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public ShortenResponse shorten(ShortenRequest request) {
         String longUrl = request.getLongUrl();
 
-        // Step 1 & 2: Generate unique short code
-        // Redis INCR is atomic — safe even with 100 concurrent requests
+        // ── Step 0: Compute SHA-256 hash of the longUrl ───────────────────
+        // Why hash? Because longUrl can be 2048 chars — too long for a DB index.
+        // SHA-256 always produces 64 hex chars. Safe to index.
+        // DigestUtils comes from Apache Commons Codec (already in Spring Boot via spring-boot-starter-web)
+        String hash = DigestUtils.sha256Hex(longUrl);
+
+        // ── Step 1: Check if this URL was already shortened ───────────────
+        // We check by HASH, not by the full longUrl string
+        Optional<UrlMapping> existing = repository.findByLongUrlHash(hash);
+        if (existing.isPresent()) {
+            // Already exists → return same short URL (idempotent) ✅
+            String shortCode = existing.get().getShortCode();
+            return new ShortenResponse(baseUrl + shortCode, shortCode, longUrl);
+        }
+
+        // ── Step 2: Generate a new short code ────────────────────────────
         long uniqueId = redisService.generateNextId();
         String shortCode = Base62Util.encode(uniqueId);
 
-        // Step 3: Persist to MySQL (source of truth)
+        // ── Step 3: Build the entity ──────────────────────────────────────
         UrlMapping mapping = new UrlMapping();
         mapping.setShortCode(shortCode);
         mapping.setLongUrl(longUrl);
-        repository.save(mapping);
+        mapping.setLongUrlHash(hash);   // ← store the hash too
 
-        // Step 4: Cache in Redis
-        // Next time someone hits this short URL → Redis serves it without DB query
+        // ── Step 4: Try saving to MySQL ───────────────────────────────────
+        try {
+            repository.save(mapping);
+        } catch (DataIntegrityViolationException e) {
+            // RACE CONDITION CAUGHT ✅
+            // Two threads both saw "not found", both tried to save.
+            // One won (saved first), one lost (gets this exception).
+            // The loser: look up the winner's record and return it.
+            //
+            // Why not just let it throw? Because the user still needs a valid response.
+            // The URL WAS shortened — just by the other thread.
+            UrlMapping saved = repository.findByLongUrlHash(hash)
+                    .orElseThrow(() -> new RuntimeException("Unexpected: hash not found after conflict"));
+            String existingCode = saved.getShortCode();
+            return new ShortenResponse(baseUrl + existingCode, existingCode, longUrl);
+        }
+
+        // ── Step 5: Cache in Redis & return ──────────────────────────────
         redisService.cacheUrl(shortCode, longUrl);
-
-        // Step 5: Build and return the full short URL
-        String shortUrl = baseUrl + shortCode;
-        return new ShortenResponse(shortUrl, shortCode, longUrl);
+        return new ShortenResponse(baseUrl + shortCode, shortCode, longUrl);
     }
 }

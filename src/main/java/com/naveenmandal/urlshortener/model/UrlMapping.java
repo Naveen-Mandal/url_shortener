@@ -15,6 +15,9 @@ public class UrlMapping {
     @Column(name = "long_url", nullable = false, length = 2048)
     private String longUrl;
 
+    @Column(name = "long_url_hash", nullable = false, unique = true, length = 64)
+    private String longUrlHash;   // SHA-256(longUrl) stored as hex string
+
     @Column(name = "short_code", nullable = false, length = 10, unique = true)
     private String shortCode;
 
@@ -53,4 +56,6 @@ public class UrlMapping {
     public void setClickCount(Long clickCount) {
         this.clickCount = clickCount;
     }
+    public String getLongUrlHash() { return longUrlHash; }
+    public void setLongUrlHash(String longUrlHash) { this.longUrlHash = longUrlHash; }
 }
