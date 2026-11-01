@@ -45,7 +45,7 @@ public class UrlShortenerService {
      * It does NOT protect Redis (Redis has no transactions with DB),
      * but that's acceptable — Redis is a cache, DB is source of truth.
      */
-    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
+//    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public ShortenResponse shorten(ShortenRequest request) {
         String longUrl = request.getLongUrl();
 
@@ -94,5 +94,20 @@ public class UrlShortenerService {
         // ── Step 5: Cache in Redis & return ──────────────────────────────
         redisService.cacheUrl(shortCode, longUrl);
         return new ShortenResponse(baseUrl + shortCode, shortCode, longUrl);
+    }
+
+    public Optional<String> resolve(String shortCode){
+        String cachedLongUrl = redisService.getCachedUrl(shortCode);
+        if(cachedLongUrl != null){
+            return Optional.of(cachedLongUrl);
+        }
+        Optional<UrlMapping> dbLongUrl = repository.findByShortCode(shortCode);
+        if(dbLongUrl.isPresent()){
+            redisService.cacheUrl( shortCode, dbLongUrl.get().getLongUrl());
+            return Optional.of(dbLongUrl.get().getLongUrl());
+        }
+
+        return Optional.empty();
+
     }
 }
