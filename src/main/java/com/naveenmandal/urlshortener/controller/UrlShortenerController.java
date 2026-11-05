@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController  // = @Controller + @ResponseBody (returns JSON, not HTML views)
@@ -59,5 +61,25 @@ public class UrlShortenerController {
         return ResponseEntity.status(HttpStatus.FOUND) // HTTP 302
                 .headers(headers)
                 .build();
+    }
+
+
+    /**
+     * GET /{shortCode}/stats
+     * Returns total clicks (DB + real-time Redis buffer).
+     */
+    @GetMapping("/{shortCode}/stats")
+    public ResponseEntity<Map<String, Object>> getStats(@PathVariable String shortCode) {
+        Optional<Long> totalClicks = shortenerService.getTotalClicks(shortCode);
+
+        if (totalClicks.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("shortCode", shortCode);
+        response.put("totalClicks", totalClicks.get());
+
+        return ResponseEntity.ok(response);
     }
 }
