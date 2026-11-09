@@ -1,16 +1,21 @@
 package com.naveenmandal.urlshortener.service;
 
+import com.naveenmandal.urlshortener.dto.LeaderboardEntry;
 import com.naveenmandal.urlshortener.dto.ShortenRequest;
 import com.naveenmandal.urlshortener.dto.ShortenResponse;
 import com.naveenmandal.urlshortener.model.UrlMapping;
 import com.naveenmandal.urlshortener.repository.UrlMappingRepository;
 import com.naveenmandal.urlshortener.util.Base62Util;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -24,6 +29,8 @@ public class UrlShortenerService {
 
     private final UrlMappingRepository repository;
     private final RedisService redisService;
+
+    private static final Logger log = LoggerFactory.getLogger(UrlShortenerService.class);
 
     // Constructor injection — always prefer this over @Autowired on fields
     // Reason: makes dependencies explicit, easier to unit test
@@ -101,19 +108,46 @@ public class UrlShortenerService {
         String cachedLongUrl = redisService.getCachedUrl(shortCode);
         if(cachedLongUrl != null){
             // Record click in Redis (FAST PATH)
-            redisService.recordClick(shortCode);
+            trackClickSilently(shortCode);
             return Optional.of(cachedLongUrl);
         }
         Optional<UrlMapping> dbLongUrl = repository.findByShortCode(shortCode);
         if(dbLongUrl.isPresent()){
             redisService.cacheUrl( shortCode, dbLongUrl.get().getLongUrl());
             // Record click in Redis
-            redisService.recordClick(shortCode);
+            trackClickSilently(shortCode);
             return Optional.of(dbLongUrl.get().getLongUrl());
         }
 
         return Optional.empty();
 
+    }
+
+    /**
+     * Prevents analytics exceptions from breaking user redirect
+     */
+    private void trackClickSilently(String shortCode) {
+        try {
+            redisService.recordClick(shortCode);
+        } catch (Exception e) {
+            log.warn("Failed to record click analytics for shortCode {}: {}", shortCode, e.getMessage());
+        }
+    }
+
+
+    /**
+     * Converts Redis ZSet tuples to LeaderboardEntry DTOs
+     */
+    public List<LeaderboardEntry> getTopLeaderboard(int limit) {
+        Set<ZSetOperations.TypedTuple<String>> rawEntries = redisService.getTopUrls(limit);
+        List<LeaderboardEntry> result = new ArrayList<>();
+        for (ZSetOperations.TypedTuple<String> tuple : rawEntries) {
+            if (tuple.getValue() != null) {
+                long score = tuple.getScore() != null ? tuple.getScore().longValue() : 0L;
+                result.add(new LeaderboardEntry(tuple.getValue(), score));
+            }
+        }
+        return result;
     }
 
 

@@ -1,5 +1,6 @@
 package com.naveenmandal.urlshortener.controller;
 
+import com.naveenmandal.urlshortener.dto.LeaderboardEntry;
 import com.naveenmandal.urlshortener.dto.ShortenRequest;
 import com.naveenmandal.urlshortener.dto.ShortenResponse;
 import com.naveenmandal.urlshortener.service.UrlShortenerService;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -70,6 +72,38 @@ public class UrlShortenerController {
      */
     @GetMapping("/{shortCode}/stats")
     public ResponseEntity<Map<String, Object>> getStats(@PathVariable String shortCode) {
+        Optional<Long> totalClicks = shortenerService.getTotalClicks(shortCode);
+
+        if (totalClicks.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("shortCode", shortCode);
+        response.put("totalClicks", totalClicks.get());
+
+        return ResponseEntity.ok(response);
+    }
+
+
+
+    /**
+     * GET /stats/top?limit=10
+     * Returns top clicked URLs using Redis Sorted Set.
+     */
+    @GetMapping("/stats/top")
+    public ResponseEntity<List<LeaderboardEntry>> getTopUrls(
+            @RequestParam(defaultValue = "10") int limit) {
+        List<LeaderboardEntry> topUrls = shortenerService.getTopLeaderboard(limit);
+        return ResponseEntity.ok(topUrls);
+    }
+
+    /**
+     * GET /stats/{shortCode}
+     * Returns stats for a single URL.
+     */
+    @GetMapping("/stats/{shortCode}")
+    public ResponseEntity<Map<String, Object>> getUrlStats(@PathVariable String shortCode) {
         Optional<Long> totalClicks = shortenerService.getTotalClicks(shortCode);
 
         if (totalClicks.isEmpty()) {
