@@ -1,6 +1,7 @@
 package com.naveenmandal.urlshortener.interceptor;
 
 import com.naveenmandal.urlshortener.service.RateLimiterService;
+import com.naveenmandal.urlshortener.util.IpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        String clientIp = getClientIp(request);
+        String clientIp = IpUtil.getClientIp(request);
         String uri = request.getRequestURI();
         String method = request.getMethod();
 
@@ -61,16 +62,16 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         return true; // Request allowed to proceed to controller
     }
-
-    /**
-     * Extracts the real client IP even if behind Nginx, Cloudflare, or AWS ALB.
-     */
-    private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            // If multiple proxies, first IP in the list is the actual client
-            return xForwardedFor.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
-    }
+//
+//    /**
+//     * Extracts the real client IP even if behind Nginx, Cloudflare, or AWS ALB.
+//     */
+//    private String getClientIp(HttpServletRequest request) {
+//        String xForwardedFor = request.getHeader("X-Forwarded-For");
+//        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+//            // If multiple proxies, first IP in the list is the actual client
+//            return xForwardedFor.split(",")[0].trim();
+//        }
+//        return request.getRemoteAddr();
+//    }
 }

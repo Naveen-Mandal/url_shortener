@@ -104,18 +104,18 @@ public class UrlShortenerService {
         return new ShortenResponse(baseUrl + shortCode, shortCode, longUrl);
     }
 
-    public Optional<String> resolve(String shortCode){
+    public Optional<String> resolve(String shortCode, String clientIp){
         String cachedLongUrl = redisService.getCachedUrl(shortCode);
         if(cachedLongUrl != null){
             // Record click in Redis (FAST PATH)
-            trackClickSilently(shortCode);
+            trackClickSilently(shortCode, clientIp);
             return Optional.of(cachedLongUrl);
         }
         Optional<UrlMapping> dbLongUrl = repository.findByShortCode(shortCode);
         if(dbLongUrl.isPresent()){
             redisService.cacheUrl( shortCode, dbLongUrl.get().getLongUrl());
             // Record click in Redis
-            trackClickSilently(shortCode);
+            trackClickSilently(shortCode, clientIp);
             return Optional.of(dbLongUrl.get().getLongUrl());
         }
 
@@ -126,13 +126,27 @@ public class UrlShortenerService {
     /**
      * Prevents analytics exceptions from breaking user redirect
      */
-    private void trackClickSilently(String shortCode) {
+    private void trackClickSilently(String shortCode, String clientIp) {
         try {
+            // 1. Total clicks & Leaderboard
             redisService.recordClick(shortCode);
+            // 2. Unique visitor count -HyperLogLog.
+            if (clientIp != null && !clientIp.isBlank()) {
+                redisService.recordVisitor(shortCode, clientIp);
+            }
         } catch (Exception e) {
             log.warn("Failed to record click analytics for shortCode {}: {}", shortCode, e.getMessage());
         }
     }
+
+
+    /**
+     * Returns unique visitor count from HyperLogLog
+     */
+    public long getUniqueVisitors(String shortCode) {
+        return redisService.getUniqueVisitorCount(shortCode);
+    }
+
 
 
     /**

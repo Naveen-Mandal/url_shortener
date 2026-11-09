@@ -4,6 +4,9 @@ import com.naveenmandal.urlshortener.dto.LeaderboardEntry;
 import com.naveenmandal.urlshortener.dto.ShortenRequest;
 import com.naveenmandal.urlshortener.dto.ShortenResponse;
 import com.naveenmandal.urlshortener.service.UrlShortenerService;
+import com.naveenmandal.urlshortener.util.IpUtil;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,8 +51,10 @@ public class UrlShortenerController {
      * - 404 Not Found if code does not exist
      */
     @GetMapping("/{shortCode}")
-    public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
-        Optional<String> longUrl = shortenerService.resolve(shortCode);
+    public ResponseEntity<Void> redirect(@PathVariable String shortCode
+                                        , HttpServletRequest request) {
+        String clientIp = IpUtil.getClientIp(request);
+        Optional<String> longUrl = shortenerService.resolve(shortCode, clientIp);
 
         // If shortCode does not exist, return 404 Not Found
         if (longUrl.isEmpty()) {
@@ -110,9 +115,12 @@ public class UrlShortenerController {
             return ResponseEntity.notFound().build();
         }
 
+        long uniqueVisitors = shortenerService.getUniqueVisitors(shortCode);
+
         Map<String, Object> response = new HashMap<>();
         response.put("shortCode", shortCode);
         response.put("totalClicks", totalClicks.get());
+        response.put("uniqueVisitors", uniqueVisitors);
 
         return ResponseEntity.ok(response);
     }

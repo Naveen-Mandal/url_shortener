@@ -126,4 +126,34 @@ public class RedisService {
         redisTemplate.opsForSet().remove(ACTIVE_CLICKS_SET, shortCode);
         return countStr != null ? Long.parseLong(countStr) : 0L;
     }
+
+
+
+
+    // ─── HyperLogLog (Unique Visitors) ──────────────────────────────────
+    private static final String VISITORS_PREFIX = "visitors:";
+
+    /**
+     * Adds an IP to the HyperLogLog for the given shortCode.
+     * Takes ~12KB fixed memory regardless of whether there are 10 or 10,000,000 IPs.
+     *
+     * Redis command: PFADD visitors:<shortCode> <clientIp>
+     */
+    public void recordVisitor(String shortCode, String clientIp) {
+        String key = VISITORS_PREFIX + shortCode;
+        redisTemplate.opsForHyperLogLog().add(key, clientIp);
+    }
+
+    /**
+     * Returns the estimated number of unique visitors.
+     *
+     * Redis command: PFCOUNT visitors:<shortCode>
+     */
+    public long getUniqueVisitorCount(String shortCode) {
+        String key = VISITORS_PREFIX + shortCode;
+        Long count = redisTemplate.opsForHyperLogLog().size(key);
+        return count != null ? count : 0L;
+    }
+
+
 }
