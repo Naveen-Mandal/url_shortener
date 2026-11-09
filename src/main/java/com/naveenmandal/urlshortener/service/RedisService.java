@@ -1,8 +1,10 @@
 package com.naveenmandal.urlshortener.service;
 
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -65,9 +67,14 @@ public class RedisService {
         redisTemplate.delete(URL_CACHE_PREFIX + shortCode);
     }
 
+
+
+
+
     // ─── Click Analytics (Write-Behind) ──────────────────────────────────
     private static final String CLICK_COUNT_PREFIX = "clicks:";
     private static final String ACTIVE_CLICKS_SET = "clicks:active_keys";
+    private static final String LEADERBOARD_KEY = "top:urls";
 
     /**
      * Atomically increments the click counter in Redis.
@@ -83,7 +90,17 @@ public class RedisService {
         redisTemplate.opsForValue().increment(key);
         // Track which short codes have unsynced clicks
         redisTemplate.opsForSet().add(ACTIVE_CLICKS_SET, shortCode);
+
+        redisTemplate.opsForZSet().incrementScore(LEADERBOARD_KEY, shortCode, 1);
     }
+
+
+    public Set<ZSetOperations.TypedTuple<String>> getTopUrls(int limit) {
+        Set<ZSetOperations.TypedTuple<String>> top =
+                redisTemplate.opsForZSet().reverseRangeWithScores(LEADERBOARD_KEY, 0, limit - 1);
+        return top != null ? top : Collections.emptySet();
+    }
+
 
     /**
      * Gets pending clicks currently in Redis memory (not yet flushed to DB).

@@ -7,7 +7,8 @@ services:
       --requirepass redispass
       --appendonly yes
       --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
+#      this will delete only those keys which have TTL on full memory of redis.
     ports:
       - "6379:6379"
     volumes:
