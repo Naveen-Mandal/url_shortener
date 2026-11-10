@@ -1,5 +1,6 @@
 package com.naveenmandal.urlshortener.service;
 
+import com.naveenmandal.urlshortener.dto.ClickEvent;
 import com.naveenmandal.urlshortener.dto.LeaderboardEntry;
 import com.naveenmandal.urlshortener.dto.ShortenRequest;
 import com.naveenmandal.urlshortener.dto.ShortenResponse;
@@ -14,6 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -108,14 +110,16 @@ public class UrlShortenerService {
         String cachedLongUrl = redisService.getCachedUrl(shortCode);
         if(cachedLongUrl != null){
             // Record click in Redis (FAST PATH)
-            trackClickSilently(shortCode, clientIp);
+//            trackClickSilently(shortCode, clientIp);
+            publishClickEvent(shortCode, clientIp);  //asynchronous analytics
             return Optional.of(cachedLongUrl);
         }
         Optional<UrlMapping> dbLongUrl = repository.findByShortCode(shortCode);
         if(dbLongUrl.isPresent()){
             redisService.cacheUrl( shortCode, dbLongUrl.get().getLongUrl());
             // Record click in Redis
-            trackClickSilently(shortCode, clientIp);
+//            trackClickSilently(shortCode, clientIp);
+            publishClickEvent(shortCode, clientIp);  //asynchronous analytics.
             return Optional.of(dbLongUrl.get().getLongUrl());
         }
 
@@ -123,21 +127,32 @@ public class UrlShortenerService {
 
     }
 
+
     /**
-     * Prevents analytics exceptions from breaking user redirect
+     * Pub/Sub decoupled analytics:
+     * Only emits a lightweight event to Redis and returns immediately!
+     * ClickListener will process Counter, Leaderboard, and HLL in the background.
      */
-    private void trackClickSilently(String shortCode, String clientIp) {
-        try {
-            // 1. Total clicks & Leaderboard
-            redisService.recordClick(shortCode);
-            // 2. Unique visitor count -HyperLogLog.
-            if (clientIp != null && !clientIp.isBlank()) {
-                redisService.recordVisitor(shortCode, clientIp);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to record click analytics for shortCode {}: {}", shortCode, e.getMessage());
-        }
+    private void publishClickEvent(String shortCode, String clientIp) {
+        ClickEvent event = new ClickEvent(shortCode, clientIp, Instant.now());
+        redisService.publishClickEvent(event);
     }
+
+//    /**
+//     * Prevents analytics exceptions from breaking user redirect
+//     */
+//    private void trackClickSilently(String shortCode, String clientIp) {
+//        try {
+//            // 1. Total clicks & Leaderboard
+//            redisService.recordClick(shortCode);
+//            // 2. Unique visitor count -HyperLogLog.
+//            if (clientIp != null && !clientIp.isBlank()) {
+//                redisService.recordVisitor(shortCode, clientIp);
+//            }
+//        } catch (Exception e) {
+//            log.warn("Failed to record click analytics for shortCode {}: {}", shortCode, e.getMessage());
+//        }
+//    }
 
 
     /**

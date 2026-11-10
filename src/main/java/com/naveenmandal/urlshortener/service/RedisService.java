@@ -1,8 +1,10 @@
 package com.naveenmandal.urlshortener.service;
 
+import com.naveenmandal.urlshortener.dto.ClickEvent;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Collections;
 import java.util.Set;
@@ -17,10 +19,14 @@ public class RedisService {
     private static final long DEFAULT_TTL_SECONDS = 86400L;              // 24 hours
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    public static final String CLICKS_TOPIC = "clicks:events"; //Channel Name
 
     // Constructor injection (preferred over @Autowired field injection)
-    public RedisService(RedisTemplate<String, String> redisTemplate) {
+    public RedisService(RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
+        this.objectMapper  = objectMapper;
     }
 
     // ─── ID Generation ───────────────────────────────────────────────────
@@ -155,5 +161,25 @@ public class RedisService {
         return count != null ? count : 0L;
     }
 
+
+
+
+    // ─── Pub/Sub (Event Publishing) ──────────────────────────────────────
+
+    /**
+     * Publishes a click event to Redis channel asynchronously.
+     * Takes <0.1ms (fire-and-forget). Does NOT block the caller.
+     *
+     * Redis command: PUBLISH clicks:events "{\"shortCode\":\"1\", ...}"
+     */
+    public void publishClickEvent(ClickEvent event) {
+        try {
+            String jsonPayload = objectMapper.writeValueAsString(event);
+            redisTemplate.convertAndSend(CLICKS_TOPIC, jsonPayload);
+        } catch (Exception e) {
+            // Log and ignore so publish errors never disrupt the redirect
+            System.err.println("Failed to publish click event: " + e.getMessage());
+        }
+    }
 
 }

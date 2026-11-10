@@ -1,9 +1,13 @@
 package com.naveenmandal.urlshortener.config;
 
+import com.naveenmandal.urlshortener.listener.ClickListener;
+import com.naveenmandal.urlshortener.service.RedisService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration  // tells Spring: "this class has Bean definitions"
@@ -24,5 +28,26 @@ public class RedisConfig {
 
         template.afterPropertiesSet();
         return template;
+    }
+
+    @Bean
+    public ChannelTopic clickTopic() {
+        return new ChannelTopic(RedisService.CLICKS_TOPIC);
+    }
+
+    /**
+     * Background message listener container.
+     * Manages worker threads that listen to incoming Redis messages.
+     */
+    @Bean
+    public RedisMessageListenerContainer redisContainer(
+            RedisConnectionFactory connectionFactory,
+            ClickListener clickListener,
+            ChannelTopic clickTopic) {
+
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        container.addMessageListener(clickListener, clickTopic);
+        return container;
     }
 }
